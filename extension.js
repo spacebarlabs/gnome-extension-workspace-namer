@@ -69,6 +69,13 @@ export default class WorkspaceNamer extends Extension {
     enable() {
         this._settings = new Gio.Settings({ schema_id: 'org.gnome.desktop.wm.preferences' });
 
+        // Maps workspace stable_sequence -> name
+        // stable_sequence is computed from window IDs on the workspace
+        this._workspaceNameMap = new Map();
+        
+        // Load existing names from settings and create initial mappings
+        this._initializeWorkspaceMap();
+
         this._button = new PanelMenu.Button(0.0, 'WorkspaceNamer', false);
 
         this._label = new St.Label({
@@ -95,6 +102,8 @@ export default class WorkspaceNamer extends Extension {
 
         this._wsSignal = global.workspace_manager.connect('active-workspace-changed', () => this._updateLabel());
         this._settingsSignal = this._settings.connect('changed::workspace-names', () => this._updateLabel());
+        this._wsAddedSignal = global.workspace_manager.connect('workspace-added', () => this._onWorkspacesChanged());
+        this._wsRemovedSignal = global.workspace_manager.connect('workspace-removed', () => this._onWorkspacesChanged());
 
         this._updateLabel();
     }
@@ -108,18 +117,42 @@ export default class WorkspaceNamer extends Extension {
             this._settings.disconnect(this._settingsSignal);
             this._settingsSignal = null;
         }
+        if (this._wsAddedSignal) {
+            global.workspace_manager.disconnect(this._wsAddedSignal);
+            this._wsAddedSignal = null;
+        }
+        if (this._wsRemovedSignal) {
+            global.workspace_manager.disconnect(this._wsRemovedSignal);
+            this._wsRemovedSignal = null;
+        }
         if (this._button) {
             this._button.destroy();
             this._button = null;
         }
+        this._workspaceNameMap = null;
         this._settings = null;
     }
 
     _updateLabel() {
         try {
             let activeIndex = global.workspace_manager.get_active_workspace_index();
-            let names = this._settings.get_strv('workspace-names');
-            let currentName = names[activeIndex] || `Workspace ${activeIndex + 1}`;
+            let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
+            let stableId = this._getWorkspaceStableId(workspace);
+            
+            // Try to get name from our map first (window-based tracking)
+            let currentName = this._workspaceNameMap.get(stableId);
+            
+            // Fallback to position-based name from settings for backwards compatibility
+            if (!currentName) {
+                let names = this._settings.get_strv('workspace-names');
+                currentName = names[activeIndex];
+            }
+            
+            // Final fallback to default name
+            if (!currentName) {
+                currentName = `Workspace ${activeIndex + 1}`;
+            }
+            
             if (this._label) this._label.set_text(currentName);
         } catch (e) {
             console.error(e);
@@ -129,8 +162,22 @@ export default class WorkspaceNamer extends Extension {
     _openNativeDialog() {
         try {
             let activeIndex = global.workspace_manager.get_active_workspace_index();
-            let names = this._settings.get_strv('workspace-names');
-            let currentName = names[activeIndex] || `Workspace ${activeIndex + 1}`;
+            let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
+            let stableId = this._getWorkspaceStableId(workspace);
+            
+            // Try to get name from our map first
+            let currentName = this._workspaceNameMap.get(stableId);
+            
+            // Fallback to position-based name from settings
+            if (!currentName) {
+                let names = this._settings.get_strv('workspace-names');
+                currentName = names[activeIndex];
+            }
+            
+            // Final fallback to default name
+            if (!currentName) {
+                currentName = `Workspace ${activeIndex + 1}`;
+            }
 
             let dialog = new RenameDialog(currentName, (newName) => {
                 if (newName && newName.trim() !== "") {
@@ -145,10 +192,100 @@ export default class WorkspaceNamer extends Extension {
 
     _saveName(newName) {
         let activeIndex = global.workspace_manager.get_active_workspace_index();
+        let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
+        let stableId = this._getWorkspaceStableId(workspace);
+        
+        // Store in our map (window-based tracking)
+        this._workspaceNameMap.set(stableId, newName);
+        
+        // Also update position-based settings for backwards compatibility
         let names = this._settings.get_strv('workspace-names');
         while (names.length <= activeIndex) names.push("");
         names[activeIndex] = newName;
         this._settings.set_strv('workspace-names', names);
+        
         this._updateLabel();
+    }
+
+    /**
+     * Get a stable identifier for a workspace based on its windows.
+     * This allows us to track workspaces even when their index changes.
+     * 
+     * @param {Meta.Workspace} workspace - The workspace object
+     * @returns {string} A stable identifier based on window IDs
+     */
+    _getWorkspaceStableId(workspace) {
+        try {
+            let windows = workspace.list_windows();
+            
+            // If workspace has no windows, use a special marker with the index
+            // This handles empty workspaces that haven't been assigned yet
+            if (windows.length === 0) {
+                return `empty-ws-${workspace.index()}`;
+            }
+            
+            // Create a stable ID from sorted window IDs
+            // This ensures the same set of windows always produces the same ID
+            let windowIds = windows
+                .map(w => w.get_id())
+                .sort((a, b) => a - b);
+            
+            return `windows-${windowIds.join('-')}`;
+        } catch (e) {
+            console.error("Error getting workspace stable ID:", e);
+            return `fallback-${workspace.index()}`;
+        }
+    }
+
+    /**
+     * Initialize workspace name mappings from existing settings.
+     * This provides backwards compatibility with position-based names.
+     */
+    _initializeWorkspaceMap() {
+        try {
+            let names = this._settings.get_strv('workspace-names');
+            let numWorkspaces = global.workspace_manager.get_n_workspaces();
+            
+            for (let i = 0; i < numWorkspaces && i < names.length; i++) {
+                if (names[i] && names[i].trim() !== "") {
+                    let workspace = global.workspace_manager.get_workspace_by_index(i);
+                    if (workspace) {
+                        let stableId = this._getWorkspaceStableId(workspace);
+                        this._workspaceNameMap.set(stableId, names[i]);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error initializing workspace map:", e);
+        }
+    }
+
+    /**
+     * Handle workspace additions and removals.
+     * This updates our mappings to ensure names follow their windows.
+     */
+    _onWorkspacesChanged() {
+        try {
+            // Rebuild the settings array based on current workspace order
+            let numWorkspaces = global.workspace_manager.get_n_workspaces();
+            let names = [];
+            
+            for (let i = 0; i < numWorkspaces; i++) {
+                let workspace = global.workspace_manager.get_workspace_by_index(i);
+                let stableId = this._getWorkspaceStableId(workspace);
+                
+                // Look up the name for this workspace's windows
+                let name = this._workspaceNameMap.get(stableId) || "";
+                names.push(name);
+            }
+            
+            // Update settings to reflect new order
+            this._settings.set_strv('workspace-names', names);
+            
+            // Update the label in case the active workspace changed
+            this._updateLabel();
+        } catch (e) {
+            console.error("Error handling workspace change:", e);
+        }
     }
 }
