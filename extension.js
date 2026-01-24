@@ -73,6 +73,9 @@ export default class WorkspaceNamer extends Extension {
         // stable_sequence is computed from window IDs on the workspace
         this._workspaceNameMap = new Map();
         
+        // Track current workspace IDs to detect when they're reordered
+        this._workspaceInstances = new Map(); // index -> {stableId, name}
+        
         // Load existing names from settings and create initial mappings
         this._initializeWorkspaceMap();
 
@@ -130,6 +133,7 @@ export default class WorkspaceNamer extends Extension {
             this._button = null;
         }
         this._workspaceNameMap = null;
+        this._workspaceInstances = null;
         this._settings = null;
     }
 
@@ -139,13 +143,30 @@ export default class WorkspaceNamer extends Extension {
             let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
             let stableId = this._getWorkspaceStableId(workspace);
             
-            // Try to get name from our map first (window-based tracking)
-            let currentName = this._workspaceNameMap.get(stableId);
+            // First check if we're tracking this workspace instance at this position
+            let instance = this._workspaceInstances.get(activeIndex);
+            let currentName = null;
             
-            // Fallback to position-based name from settings for backwards compatibility
-            if (!currentName) {
-                let names = this._settings.get_strv('workspace-names');
-                currentName = names[activeIndex];
+            if (instance && instance.name) {
+                // We have a name for this workspace position
+                currentName = instance.name;
+                
+                // Update the stable ID if windows changed
+                if (instance.stableId !== stableId) {
+                    // Windows changed, update our tracking
+                    this._workspaceNameMap.delete(instance.stableId);
+                    this._workspaceNameMap.set(stableId, currentName);
+                    instance.stableId = stableId;
+                }
+            } else {
+                // Try to get name from our window-based map
+                currentName = this._workspaceNameMap.get(stableId);
+                
+                // Fallback to position-based name from settings for backwards compatibility
+                if (!currentName) {
+                    let names = this._settings.get_strv('workspace-names');
+                    currentName = names[activeIndex];
+                }
             }
             
             // Final fallback to default name
@@ -165,13 +186,21 @@ export default class WorkspaceNamer extends Extension {
             let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
             let stableId = this._getWorkspaceStableId(workspace);
             
-            // Try to get name from our map first
-            let currentName = this._workspaceNameMap.get(stableId);
+            // Check if we're tracking this workspace instance
+            let instance = this._workspaceInstances.get(activeIndex);
+            let currentName = null;
             
-            // Fallback to position-based name from settings
-            if (!currentName) {
-                let names = this._settings.get_strv('workspace-names');
-                currentName = names[activeIndex];
+            if (instance && instance.name) {
+                currentName = instance.name;
+            } else {
+                // Try to get name from our window-based map
+                currentName = this._workspaceNameMap.get(stableId);
+                
+                // Fallback to position-based name from settings
+                if (!currentName) {
+                    let names = this._settings.get_strv('workspace-names');
+                    currentName = names[activeIndex];
+                }
             }
             
             // Final fallback to default name
@@ -197,6 +226,12 @@ export default class WorkspaceNamer extends Extension {
         
         // Store in our map (window-based tracking)
         this._workspaceNameMap.set(stableId, newName);
+        
+        // Track this workspace instance
+        this._workspaceInstances.set(activeIndex, {
+            stableId: stableId,
+            name: newName
+        });
         
         // Also update position-based settings for backwards compatibility
         let names = this._settings.get_strv('workspace-names');
@@ -252,6 +287,10 @@ export default class WorkspaceNamer extends Extension {
                     if (workspace) {
                         let stableId = this._getWorkspaceStableId(workspace);
                         this._workspaceNameMap.set(stableId, names[i]);
+                        this._workspaceInstances.set(i, {
+                            stableId: stableId,
+                            name: names[i]
+                        });
                     }
                 }
             }
@@ -266,18 +305,49 @@ export default class WorkspaceNamer extends Extension {
      */
     _onWorkspacesChanged() {
         try {
-            // Rebuild the settings array based on current workspace order
             let numWorkspaces = global.workspace_manager.get_n_workspaces();
             let names = [];
+            let newInstances = new Map();
             
+            // Build a map of current stable IDs to find matches
+            let currentWorkspaces = [];
             for (let i = 0; i < numWorkspaces; i++) {
                 let workspace = global.workspace_manager.get_workspace_by_index(i);
                 let stableId = this._getWorkspaceStableId(workspace);
+                currentWorkspaces.push({ index: i, stableId: stableId, workspace: workspace });
+            }
+            
+            // Try to match current workspaces with previous instances
+            for (let curr of currentWorkspaces) {
+                let name = "";
+                let matchedInstance = null;
                 
-                // Look up the name for this workspace's windows
-                let name = this._workspaceNameMap.get(stableId) || "";
+                // First, try to find by stable ID (same windows)
+                name = this._workspaceNameMap.get(curr.stableId);
+                
+                // If we found a match by windows, use that name
+                if (name) {
+                    newInstances.set(curr.index, {
+                        stableId: curr.stableId,
+                        name: name
+                    });
+                } else {
+                    // Check if any previous instance might have moved here
+                    // Look through previous instances to see if we can match by window overlap
+                    for (let [oldIndex, oldInstance] of this._workspaceInstances.entries()) {
+                        if (!matchedInstance && oldInstance.name) {
+                            // This is a heuristic: if this workspace was previously tracked,
+                            // it might have just had windows change
+                            // For now, we'll let it lose the name if windows completely changed
+                        }
+                    }
+                }
+                
                 names.push(name);
             }
+            
+            // Update our instance tracking
+            this._workspaceInstances = newInstances;
             
             // Update settings to reflect new order
             this._settings.set_strv('workspace-names', names);
