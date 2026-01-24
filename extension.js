@@ -69,8 +69,8 @@ export default class WorkspaceNamer extends Extension {
     enable() {
         this._settings = new Gio.Settings({ schema_id: 'org.gnome.desktop.wm.preferences' });
 
-        // Maps workspace stable_sequence -> name
-        // stable_sequence is computed from window IDs on the workspace
+        // Maps workspace stable ID -> name
+        // Stable ID is computed from window IDs on the workspace
         this._workspaceNameMap = new Map();
         
         // Track current workspace IDs to detect when they're reordered
@@ -319,28 +319,15 @@ export default class WorkspaceNamer extends Extension {
             
             // Try to match current workspaces with previous instances
             for (let curr of currentWorkspaces) {
-                let name = "";
-                let matchedInstance = null;
+                // Try to find by stable ID (same windows)
+                let name = this._workspaceNameMap.get(curr.stableId) || "";
                 
-                // First, try to find by stable ID (same windows)
-                name = this._workspaceNameMap.get(curr.stableId);
-                
-                // If we found a match by windows, use that name
+                // If we found a match by windows, track this instance
                 if (name) {
                     newInstances.set(curr.index, {
                         stableId: curr.stableId,
                         name: name
                     });
-                } else {
-                    // Check if any previous instance might have moved here
-                    // Look through previous instances to see if we can match by window overlap
-                    for (let [oldIndex, oldInstance] of this._workspaceInstances.entries()) {
-                        if (!matchedInstance && oldInstance.name) {
-                            // This is a heuristic: if this workspace was previously tracked,
-                            // it might have just had windows change
-                            // For now, we'll let it lose the name if windows completely changed
-                        }
-                    }
                 }
                 
                 names.push(name);
