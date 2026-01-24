@@ -1,0 +1,25 @@
+{
+  "name": "gnome-extension-workspace-namer",
+  "version": "3.0.0",
+  "description": "A lightweight, native GNOME Shell extension that lets you name your workspaces",
+  "scripts": {
+    "test": "npm run lint && npm run validate",
+    "lint": "eslint extension.js",
+    "validate": "node tests/validate.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spacebarlabs/gnome-extension-workspace-namer.git"
+  },
+  "keywords": [
+    "gnome",
+    "gnome-shell",
+    "extension",
+    "workspace"
+  ],
+  "author": "spacebarlabs",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}
