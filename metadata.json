@@ -1,0 +1,7 @@
+{
+  "name": "Workspace Namer",
+  "description": "Rename your workspaces",
+  "uuid": "workspace-namer@spacebarlabs.com",
+  "shell-version": [ "46", "47" ],
+  "version": 3
+}
