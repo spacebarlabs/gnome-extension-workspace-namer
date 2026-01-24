@@ -78,7 +78,9 @@ export default class WorkspaceNamer extends Extension {
         });
 
         this._button.add_child(this._label);
-        Main.panel.addToStatusArea('workspace-namer', this._button, 0, 'left');
+        
+        // Added to 'left' side at index 1 to appear to the right of the workspace switcher
+        Main.panel.addToStatusArea('workspace-namer', this._button, 1, 'left');
 
         this._button.connect('button-press-event', () => {
             this._openNativeDialog();
