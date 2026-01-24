@@ -77,7 +77,7 @@ if (fs.existsSync(EXTENSION_PATH)) {
         const content = fs.readFileSync(EXTENSION_PATH, 'utf8');
 
         // Check for required export
-        if (!content.includes('export default class')) {
+        if (!/export\s+default\s+class/.test(content)) {
             console.error('✗ extension.js must export a default class');
             exitCode = 1;
         } else {
@@ -85,7 +85,7 @@ if (fs.existsSync(EXTENSION_PATH)) {
         }
 
         // Check for enable/disable methods
-        if (!content.includes('enable()') || !content.includes('disable()')) {
+        if (!/enable\s*\(\s*\)/.test(content) || !/disable\s*\(\s*\)/.test(content)) {
             console.error('✗ extension.js must have enable() and disable() methods');
             exitCode = 1;
         } else {
