@@ -171,7 +171,7 @@ export default class WorkspaceNamer extends Extension {
             
             // Final fallback to default name
             if (!currentName) {
-                currentName = `Workspace ${activeIndex + 1}`;
+                currentName = `${activeIndex + 1}`;
             }
             
             if (this._label) this._label.set_text(currentName);
@@ -205,7 +205,7 @@ export default class WorkspaceNamer extends Extension {
             
             // Final fallback to default name
             if (!currentName) {
-                currentName = `Workspace ${activeIndex + 1}`;
+                currentName = `${activeIndex + 1}`;
             }
 
             let dialog = new RenameDialog(currentName, (newName) => {
