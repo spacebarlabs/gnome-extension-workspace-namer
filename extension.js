@@ -72,10 +72,10 @@ export default class WorkspaceNamer extends Extension {
         // Maps workspace stable ID -> name
         // Stable ID is computed from window IDs on the workspace
         this._workspaceNameMap = new Map();
-        
+
         // Track current workspace IDs to detect when they're reordered
         this._workspaceInstances = new Map(); // index -> {stableId, name}
-        
+
         // Load existing names from settings and create initial mappings
         this._initializeWorkspaceMap();
 
@@ -88,7 +88,7 @@ export default class WorkspaceNamer extends Extension {
         });
 
         this._button.add_child(this._label);
-        
+
         // Added to 'left' side at index 1 to appear to the right of the workspace switcher
         Main.panel.addToStatusArea('workspace-namer', this._button, 1, 'left');
 
@@ -142,15 +142,15 @@ export default class WorkspaceNamer extends Extension {
             let activeIndex = global.workspace_manager.get_active_workspace_index();
             let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
             let stableId = this._getWorkspaceStableId(workspace);
-            
+
             // First check if we're tracking this workspace instance at this position
             let instance = this._workspaceInstances.get(activeIndex);
             let currentName = null;
-            
+
             if (instance && instance.name) {
                 // We have a name for this workspace position
                 currentName = instance.name;
-                
+
                 // Update the stable ID if windows changed
                 if (instance.stableId !== stableId) {
                     // Windows changed, update our tracking
@@ -161,19 +161,19 @@ export default class WorkspaceNamer extends Extension {
             } else {
                 // Try to get name from our window-based map
                 currentName = this._workspaceNameMap.get(stableId);
-                
+
                 // Fallback to position-based name from settings for backwards compatibility
                 if (!currentName) {
                     let names = this._settings.get_strv('workspace-names');
                     currentName = names[activeIndex];
                 }
             }
-            
+
             // Final fallback to default name
             if (!currentName) {
                 currentName = `${activeIndex + 1}`;
             }
-            
+
             if (this._label) this._label.set_text(currentName);
         } catch (e) {
             console.error(e);
@@ -185,37 +185,37 @@ export default class WorkspaceNamer extends Extension {
             let activeIndex = global.workspace_manager.get_active_workspace_index();
             let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
             let stableId = this._getWorkspaceStableId(workspace);
-            
+
             // Check if we're tracking this workspace instance
             let instance = this._workspaceInstances.get(activeIndex);
             let currentName = null;
-            
+
             if (instance && instance.name) {
                 currentName = instance.name;
             } else {
                 // Try to get name from our window-based map
                 currentName = this._workspaceNameMap.get(stableId);
-                
+
                 // Fallback to position-based name from settings
                 if (!currentName) {
                     let names = this._settings.get_strv('workspace-names');
                     currentName = names[activeIndex];
                 }
             }
-            
+
             // Final fallback to default name
             if (!currentName) {
                 currentName = `${activeIndex + 1}`;
             }
 
             let dialog = new RenameDialog(currentName, (newName) => {
-                if (newName && newName.trim() !== "") {
+                if (newName && newName.trim() !== '') {
                     this._saveName(newName.trim());
                 }
             });
             dialog.open();
         } catch (e) {
-            console.error("WS Namer Error opening dialog:", e);
+            console.error('WS Namer Error opening dialog:', e);
         }
     }
 
@@ -223,51 +223,51 @@ export default class WorkspaceNamer extends Extension {
         let activeIndex = global.workspace_manager.get_active_workspace_index();
         let workspace = global.workspace_manager.get_workspace_by_index(activeIndex);
         let stableId = this._getWorkspaceStableId(workspace);
-        
+
         // Store in our map (window-based tracking)
         this._workspaceNameMap.set(stableId, newName);
-        
+
         // Track this workspace instance
         this._workspaceInstances.set(activeIndex, {
             stableId: stableId,
             name: newName
         });
-        
+
         // Also update position-based settings for backwards compatibility
         let names = this._settings.get_strv('workspace-names');
-        while (names.length <= activeIndex) names.push("");
+        while (names.length <= activeIndex) names.push('');
         names[activeIndex] = newName;
         this._settings.set_strv('workspace-names', names);
-        
+
         this._updateLabel();
     }
 
     /**
      * Get a stable identifier for a workspace based on its windows.
      * This allows us to track workspaces even when their index changes.
-     * 
+     *
      * @param {Meta.Workspace} workspace - The workspace object
      * @returns {string} A stable identifier based on window IDs
      */
     _getWorkspaceStableId(workspace) {
         try {
             let windows = workspace.list_windows();
-            
+
             // If workspace has no windows, use a special marker with the index
             // This handles empty workspaces that haven't been assigned yet
             if (windows.length === 0) {
                 return `empty-ws-${workspace.index()}`;
             }
-            
+
             // Create a stable ID from sorted window IDs
             // This ensures the same set of windows always produces the same ID
             let windowIds = windows
                 .map(w => w.get_id())
                 .sort((a, b) => a - b);
-            
+
             return `windows-${windowIds.join('-')}`;
         } catch (e) {
-            console.error("Error getting workspace stable ID:", e);
+            console.error('Error getting workspace stable ID:', e);
             return `fallback-${workspace.index()}`;
         }
     }
@@ -280,9 +280,9 @@ export default class WorkspaceNamer extends Extension {
         try {
             let names = this._settings.get_strv('workspace-names');
             let numWorkspaces = global.workspace_manager.get_n_workspaces();
-            
+
             for (let i = 0; i < numWorkspaces && i < names.length; i++) {
-                if (names[i] && names[i].trim() !== "") {
+                if (names[i] && names[i].trim() !== '') {
                     let workspace = global.workspace_manager.get_workspace_by_index(i);
                     if (workspace) {
                         let stableId = this._getWorkspaceStableId(workspace);
@@ -295,7 +295,7 @@ export default class WorkspaceNamer extends Extension {
                 }
             }
         } catch (e) {
-            console.error("Error initializing workspace map:", e);
+            console.error('Error initializing workspace map:', e);
         }
     }
 
@@ -308,7 +308,7 @@ export default class WorkspaceNamer extends Extension {
             let numWorkspaces = global.workspace_manager.get_n_workspaces();
             let names = [];
             let newInstances = new Map();
-            
+
             // Build a map of current stable IDs to find matches
             let currentWorkspaces = [];
             for (let i = 0; i < numWorkspaces; i++) {
@@ -316,12 +316,12 @@ export default class WorkspaceNamer extends Extension {
                 let stableId = this._getWorkspaceStableId(workspace);
                 currentWorkspaces.push({ index: i, stableId: stableId, workspace: workspace });
             }
-            
+
             // Try to match current workspaces with previous instances
             for (let curr of currentWorkspaces) {
                 // Try to find by stable ID (same windows)
-                let name = this._workspaceNameMap.get(curr.stableId) || "";
-                
+                let name = this._workspaceNameMap.get(curr.stableId) || '';
+
                 // If we found a match by windows, track this instance
                 if (name) {
                     newInstances.set(curr.index, {
@@ -329,20 +329,20 @@ export default class WorkspaceNamer extends Extension {
                         name: name
                     });
                 }
-                
+
                 names.push(name);
             }
-            
+
             // Update our instance tracking
             this._workspaceInstances = newInstances;
-            
+
             // Update settings to reflect new order
             this._settings.set_strv('workspace-names', names);
-            
+
             // Update the label in case the active workspace changed
             this._updateLabel();
         } catch (e) {
-            console.error("Error handling workspace change:", e);
+            console.error('Error handling workspace change:', e);
         }
     }
 }

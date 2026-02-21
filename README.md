@@ -50,3 +50,32 @@ gnome-extensions enable workspace-namer@spacebarlabs.com
 3. A dialog box will pop up
 4. Type a new name (e.g., "Code", "Music", "Browsing") and save
 5. The name updates immediately and stays saved
+
+## Development
+
+### Running Tests
+
+This extension includes automated tests that run in CI via GitHub Actions. To run tests locally:
+
+```bash
+# Install development dependencies
+npm install
+
+# Run all tests (validation + linting)
+npm test
+
+# Run only validation tests
+npm run validate
+
+# Run only linting
+npm run lint
+```
+
+### CI/CD
+
+All tests automatically run on every push and pull request via GitHub Actions. The CI workflow:
+- Validates `metadata.json` format and required fields
+- Checks that `extension.js` has proper structure
+- Runs ESLint to ensure code quality
+
+You can view the CI status and logs in the [Actions tab](https://github.com/spacebarlabs/gnome-extension-workspace-namer/actions).
